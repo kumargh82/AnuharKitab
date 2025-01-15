@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Social App with CRUD & SignalR</title>
+  <title>Social App with Email-Based Friends and Chat</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/17.0.0/angular.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
@@ -15,7 +15,7 @@
 <body ng-app="socialApp" ng-controller="MainController">
 
   <div class="container mt-4">
-    <h1 class="text-center">Social App with CRUD & SignalR</h1>
+    <h1 class="text-center">Social App with Email-Based Friends</h1>
     <p class="text-center">Developed by Subash Ghimire</p>
 
     <!-- Navigation -->
@@ -29,14 +29,15 @@
       <h3>Friend List</h3>
       <div class="friend-list">
         <div class="d-flex justify-content-between align-items-center mb-2" ng-repeat="friend in friends">
-          <span>{{ friend.name }}</span>
-          <button class="btn btn-sm btn-danger" ng-click="removeFriend(friend.id)">Remove</button>
+          <span>{{ friend.email }}</span>
+          <button class="btn btn-sm btn-danger" ng-click="removeFriend(friend.email)">Remove</button>
         </div>
       </div>
-      <div class="input-group">
-        <input type="text" class="form-control" ng-model="newFriendName" placeholder="Add a new friend">
+      <div class="input-group mb-2">
+        <input type="email" class="form-control" ng-model="newFriendEmail" placeholder="Add friend's email" required>
         <button class="btn btn-primary" ng-click="addFriend()">Add</button>
       </div>
+      <div ng-if="errorMessage" class="text-danger">{{ errorMessage }}</div>
     </div>
 
     <!-- Real-Time Chat -->
@@ -58,10 +59,11 @@
     const app = angular.module('socialApp', []);
     app.controller('MainController', function ($scope, $http) {
       $scope.activeTab = 'friends';
-      $scope.friends = [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }];
+      $scope.friends = [{ email: 'alice@example.com' }, { email: 'bob@example.com' }];
       $scope.messages = [];
-      $scope.newFriendName = '';
+      $scope.newFriendEmail = '';
       $scope.newMessage = '';
+      $scope.errorMessage = '';
 
       const hubConnection = new signalR.HubConnectionBuilder()
         .withUrl('/chatHub')
@@ -81,14 +83,24 @@
       };
 
       $scope.addFriend = function () {
-        if ($scope.newFriendName.trim()) {
-          $scope.friends.push({ id: Date.now(), name: $scope.newFriendName });
-          $scope.newFriendName = '';
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test($scope.newFriendEmail)) {
+          $scope.errorMessage = 'Invalid email address.';
+          return;
         }
+
+        if ($scope.friends.some(friend => friend.email === $scope.newFriendEmail)) {
+          $scope.errorMessage = 'Friend already added.';
+          return;
+        }
+
+        $scope.friends.push({ email: $scope.newFriendEmail });
+        $scope.newFriendEmail = '';
+        $scope.errorMessage = '';
       };
 
-      $scope.removeFriend = function (id) {
-        $scope.friends = $scope.friends.filter(friend => friend.id !== id);
+      $scope.removeFriend = function (email) {
+        $scope.friends = $scope.friends.filter(friend => friend.email !== email);
       };
 
       $scope.sendMessage = function () {
