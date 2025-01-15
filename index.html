@@ -3,104 +3,121 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Social App</title>
+  <title>Social App with CRUD & SignalR</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/17.0.0/angular.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-    }
-    .friend-list {
-      max-height: 200px;
-      overflow-y: auto;
-    }
-    .chat-box {
-      height: 300px;
-      overflow-y: auto;
-      border: 1px solid #ccc;
-      padding: 10px;
-    }
-    .video-call-placeholder {
-      width: 100%;
-      height: 200px;
-      background-color: #ddd;
-      text-align: center;
-      line-height: 200px;
-      border: 1px solid #ccc;
-    }
+    body { font-family: Arial, sans-serif; }
+    .friend-list, .chat-box { max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 15px; }
   </style>
 </head>
 <body ng-app="socialApp" ng-controller="MainController">
+
   <div class="container mt-4">
-    <h1 class="text-center">Social App</h1>
+    <h1 class="text-center">Social App with CRUD & SignalR</h1>
     <p class="text-center">Developed by Subash Ghimire</p>
 
     <!-- Navigation -->
     <nav class="nav nav-pills justify-content-center mb-4">
       <a class="nav-link" ng-class="{active: activeTab === 'friends'}" href="#" ng-click="setTab('friends')">Friends</a>
       <a class="nav-link" ng-class="{active: activeTab === 'chat'}" href="#" ng-click="setTab('chat')">Chat</a>
-      <a class="nav-link" ng-class="{active: activeTab === 'video'}" href="#" ng-click="setTab('video')">Video Call</a>
     </nav>
 
-    <!-- Main Content -->
-    <div ng-show="activeTab === 'friends'" class="friend-list">
+    <!-- Friends Management -->
+    <div ng-show="activeTab === 'friends'">
       <h3>Friend List</h3>
-      <ul class="list-group">
-        <li class="list-group-item d-flex justify-content-between align-items-center" ng-repeat="friend in friends">
-          {{ friend.name }}
-          <button class="btn btn-sm btn-success" ng-click="addFriend(friend)">Add</button>
-        </li>
-      </ul>
+      <div class="friend-list">
+        <div class="d-flex justify-content-between align-items-center mb-2" ng-repeat="friend in friends">
+          <span>{{ friend.name }}</span>
+          <button class="btn btn-sm btn-danger" ng-click="removeFriend(friend.id)">Remove</button>
+        </div>
+      </div>
+      <div class="input-group">
+        <input type="text" class="form-control" ng-model="newFriendName" placeholder="Add a new friend">
+        <button class="btn btn-primary" ng-click="addFriend()">Add</button>
+      </div>
     </div>
 
+    <!-- Real-Time Chat -->
     <div ng-show="activeTab === 'chat'">
-      <h3>Chat</h3>
+      <h3>Real-Time Chat</h3>
       <div class="chat-box">
-        <div ng-repeat="message in chatMessages">
+        <div ng-repeat="message in messages">
           <strong>{{ message.sender }}:</strong> {{ message.text }}
         </div>
       </div>
-      <div class="mt-2">
+      <div class="input-group">
         <input type="text" class="form-control" ng-model="newMessage" placeholder="Type a message">
-        <button class="btn btn-primary mt-2" ng-click="sendMessage()">Send</button>
+        <button class="btn btn-primary" ng-click="sendMessage()">Send</button>
       </div>
-    </div>
-
-    <div ng-show="activeTab === 'video'">
-      <h3>Video Call</h3>
-      <div class="video-call-placeholder">Video Call Placeholder</div>
     </div>
   </div>
 
   <script>
-    // Angular App
-    angular.module('socialApp', [])
-      .controller('MainController', function ($scope) {
-        $scope.activeTab = 'friends';
-        $scope.friends = [
-          { name: 'Alice' },
-          { name: 'Bob' },
-          { name: 'Charlie' },
-          { name: 'Diana' },
-        ];
-        $scope.chatMessages = [];
-        $scope.newMessage = '';
+    const app = angular.module('socialApp', []);
+    app.controller('MainController', function ($scope, $http) {
+      $scope.activeTab = 'friends';
+      $scope.friends = [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }];
+      $scope.messages = [];
+      $scope.newFriendName = '';
+      $scope.newMessage = '';
 
-        $scope.setTab = function (tab) {
-          $scope.activeTab = tab;
-        };
+      const hubConnection = new signalR.HubConnectionBuilder()
+        .withUrl('/chatHub')
+        .build();
 
-        $scope.addFriend = function (friend) {
-          alert(friend.name + ' added as a friend!');
-        };
-
-        $scope.sendMessage = function () {
-          if ($scope.newMessage.trim()) {
-            $scope.chatMessages.push({ sender: 'You', text: $scope.newMessage });
-            $scope.newMessage = '';
-          }
-        };
+      // SignalR Real-Time Chat
+      hubConnection.on('ReceiveMessage', function (sender, message) {
+        $scope.$apply(() => {
+          $scope.messages.push({ sender, text: message });
+        });
       });
+
+      hubConnection.start().catch(err => console.error(err));
+
+      $scope.setTab = function (tab) {
+        $scope.activeTab = tab;
+      };
+
+      $scope.addFriend = function () {
+        if ($scope.newFriendName.trim()) {
+          $scope.friends.push({ id: Date.now(), name: $scope.newFriendName });
+          $scope.newFriendName = '';
+        }
+      };
+
+      $scope.removeFriend = function (id) {
+        $scope.friends = $scope.friends.filter(friend => friend.id !== id);
+      };
+
+      $scope.sendMessage = function () {
+        if ($scope.newMessage.trim()) {
+          const sender = 'You';
+          hubConnection.invoke('SendMessage', sender, $scope.newMessage)
+            .catch(err => console.error(err));
+          $scope.newMessage = '';
+        }
+      };
+    });
+
+    // Mock Backend - SignalR ChatHub
+    class ChatHub {
+      constructor() {
+        this.clients = [];
+      }
+
+      async SendMessage(sender, message) {
+        this.clients.forEach(client => client.onReceiveMessage(sender, message));
+      }
+
+      onConnect(client) {
+        this.clients.push(client);
+      }
+    }
+
+    const chatHub = new ChatHub();
+    window.chatHub = chatHub; // Mock instance for simplicity
   </script>
 </body>
 </html>
